@@ -10,6 +10,9 @@ A Flutter library that simplifies authentication with IFS Cloud using OpenID Con
 - ✅ Token refresh functionality
 - ✅ Logout support
 - ✅ Simple configuration with sensible defaults
+- ✅ **NEW**: AuthenticationProvider widget for state management
+- ✅ **NEW**: Automatic HTTP 401 handling with token refresh
+- ✅ **NEW**: Navigation helpers for login/logout flows
 
 ## Installation
 
@@ -56,7 +59,111 @@ Add the following to your `ios/Runner/Info.plist` file:
 
 ## Usage
 
-### Basic Setup
+### Option 1: Using AuthenticationProvider (Recommended)
+
+The simplest way to use this library is with the `IfsCloudAuthProvider` widget that manages authentication state automatically:
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:ifscloud_auth_flutter/ifscloud_auth_flutter.dart';
+
+void main() {
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final config = IfsCloudAuthConfig(
+      domain: 'mycompany.ifscloud.com',
+      clientId: 'your-client-id',
+      realm: 'ifs',
+    );
+
+    return MaterialApp(
+      home: IfsCloudAuthProvider(
+        config: config,
+        // Automatically handle 401s and redirect to login when needed
+        onRequireLogin: () {
+          // Navigate to login screen
+          Navigator.pushNamed(context, '/login');
+        },
+        child: MyAuthApp(),
+      ),
+    );
+  }
+}
+
+class MyAuthApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return IfsCloudAuthStateBuilder(
+      authenticated: (context, authResult) => MainScreen(),
+      unauthenticated: (context) => LoginScreen(),
+      loading: (context) => LoadingScreen(),
+      error: (context, error) => ErrorScreen(error),
+    );
+  }
+}
+
+class LoginScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final authProvider = IfsCloudAuthProvider.maybeOf(context);
+    
+    return Scaffold(
+      body: Center(
+        child: ElevatedButton(
+          onPressed: () => authProvider.authenticate(),
+          child: Text('Sign In with IFS Cloud'),
+        ),
+      ),
+    );
+  }
+}
+
+class MainScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final authProvider = IfsCloudAuthProvider.maybeOf(context);
+    
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('My App'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.logout),
+            onPressed: () => authProvider.logout(),
+          ),
+        ],
+      ),
+      body: Text('Welcome! Token: ${authProvider.accessToken}'),
+    );
+  }
+}
+```
+
+### Automatic HTTP 401 Handling
+
+The provider automatically handles HTTP 401 responses. When your API returns 401, just call:
+
+```dart
+final authProvider = IfsCloudAuthProvider.maybeOf(context);
+await authProvider.handleHttpError(401);
+// The provider will automatically refresh the token or redirect to login
+```
+
+Or use the built-in HTTP client:
+
+```dart
+final httpClient = IfsCloudAuthHttpClient.fromContext(context);
+final response = await httpClient.get(Uri.parse('https://api.example.com/data'));
+// 401s are handled automatically!
+```
+
+### Option 2: Direct Service Usage
+
+For more control, you can use the service directly:
 
 ```dart
 import 'package:ifscloud_auth_flutter/ifscloud_auth_flutter.dart';
@@ -121,6 +228,43 @@ if (result.willExpireWithin(Duration(minutes: 5))) {
 }
 ```
 
+## Advanced Features
+
+### Custom Navigation
+
+Use the navigation helpers for custom flows:
+
+```dart
+// Navigate to login when authentication is required
+IfsCloudAuthNavigator.requireLogin(
+  context, 
+  loginRoute: '/login',
+  clearStack: true,
+);
+
+// Navigate to main app after successful login
+IfsCloudAuthNavigator.navigateToApp(
+  context,
+  homeRoute: '/home',
+  clearStack: true,
+);
+```
+
+### Custom HTTP Interceptor
+
+Create your own HTTP interceptor for different HTTP clients:
+
+```dart
+final interceptor = IfsCloudAuthInterceptor.fromContext(context);
+
+// Add auth header to requests
+final headers = <String, String>{};
+interceptor.addAuthHeader(headers);
+
+// Handle responses
+await interceptor.handleResponse(response);
+```
+
 ## Configuration Options
 
 | Parameter | Type | Required | Default | Description |
@@ -130,6 +274,16 @@ if (result.willExpireWithin(Duration(minutes: 5))) {
 | `realm` | String | No | `'ifs'` | Keycloak realm name |
 | `scopes` | List<String> | No | `['openid', 'profile', 'email']` | OAuth2 scopes to request |
 | `redirectUriScheme` | String | No | `clientId://` | Custom redirect URI scheme |
+
+### AuthenticationProvider Options
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `autoHandleTokenRefresh` | bool | `true` | Automatically refresh tokens when they expire |
+| `tokenRefreshThreshold` | Duration | `5 minutes` | Refresh tokens when they expire within this duration |
+| `onAuthStateChanged` | Function | - | Callback when authentication state changes |
+| `onAuthError` | Function | - | Callback when authentication errors occur |
+| `onRequireLogin` | Function | - | Callback when user needs to be redirected to login |
 
 ## Error Handling
 

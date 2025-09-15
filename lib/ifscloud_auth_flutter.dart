@@ -8,3 +8,6 @@ export 'src/ifscloud_auth_config.dart';
 export 'src/ifscloud_auth_service.dart';
 export 'src/ifscloud_auth_exception.dart';
 export 'src/ifscloud_auth_result.dart';
+export 'src/ifscloud_auth_provider.dart';
+export 'src/ifscloud_auth_http.dart';
+export 'src/ifscloud_auth_navigator.dart';
